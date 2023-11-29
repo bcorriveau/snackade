@@ -60,19 +60,19 @@ GVAL_OCCUPIED = 1
 GVAL_SNACK = 10
 
 BORDER_RADIUS = 6
-BORDER_WIDTH = BORDER_RADIUS * 2 + 1
+BORDER_WIDTH = BORDER_RADIUS * 2
 
 # need border offsets + border width offset!!
 BORDER_XOFF = BORDER_WIDTH
 BORDER_YOFF = 50
 
-GRID_XOFF = BORDER_XOFF + BORDER_RADIUS + 1
-GRID_YOFF = BORDER_YOFF + BORDER_RADIUS + 1
+GRID_XOFF = BORDER_XOFF + BORDER_RADIUS + 2
+GRID_YOFF = BORDER_YOFF + BORDER_RADIUS + 2
 
 PLAYER_XSIZE = 32
 PLAYER_YSIZE = 32
 
-# Grid size
+# Grid size - playing grid includes borders
 GRID_XSIZE = 23
 GRID_YSIZE = 15
 
@@ -174,7 +174,7 @@ class NoteLoop:
 def wait_anykey():
     """
     Waits for any key to be pressed
-    :return:    the key that was pressed
+    :return:    alpha key that was pressed or None
     """
 
     # pump the events and wait a bit to get them flowing
@@ -182,13 +182,16 @@ def wait_anykey():
     sleep(0.2)
     pygame.event.clear()
     while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                exit()
-            if event.type == pygame.KEYDOWN:
-                return chr(event.key)
-        clock.tick(5)
+        try:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    exit()
+                if event.type == pygame.KEYDOWN:
+                    return chr(event.key)
+            clock.tick(5)
+        except:
+            return ' '
 
 
 def write_text(screen, text, x, y, font = font1):
@@ -259,22 +262,43 @@ def display_game_status(screen, p1, p2):
     write_text(screen, ['Green Points:{:2d}  Wins:{:2d}'.format(p1.points, p1.wins),
                         'Blue  Points:{:2d}  Wins:{:2d}'.format(p2.points, p2.wins)], 250, 541)
 
+
+# Fancy rectangle with offset sides
+class FRect(pygame.Rect):
+
+    def __init__(self, lefttop , widthheight):
+        super().__init__(lefttop, widthheight)
+
+    def draw(self, screen, colour, offset):
+        rect_l = self.copy()
+        rect_h = self.copy()
+
+        rect_l.height -= offset * 2
+        rect_l.move_ip(0,offset)
+
+        rect_h.width -= offset * 2
+        rect_h.move_ip(offset, 0)
+
+        pygame.draw.rect(screen, colour, rect_l, offset)
+        pygame.draw.rect(screen, colour, rect_h, offset)
+
+
 # Class to hold all the game presentation data and methods
 class GameBox:
     def __init__(self, screen):
         self.screen = screen
         self.border = pygame.Rect((BORDER_XOFF, BORDER_YOFF),
-                                  (GRID_XSIZE * PLAYER_XSIZE - BORDER_WIDTH,
-                                   GRID_YSIZE * PLAYER_YSIZE - BORDER_WIDTH))
+                                  (GRID_XSIZE * PLAYER_XSIZE - BORDER_RADIUS - 3,
+                                   GRID_YSIZE * PLAYER_YSIZE - BORDER_RADIUS - 3))
 
-        self.game_area = pygame.Rect((GRID_XOFF, GRID_YOFF),
-                                     ((GRID_XSIZE - 1) * PLAYER_XSIZE + BORDER_RADIUS - 1,
-                                      (GRID_YSIZE - 1) * PLAYER_YSIZE + BORDER_RADIUS - 1))
+        self.game_area = pygame.Rect((GRID_XOFF + BORDER_RADIUS - 1, GRID_YOFF + BORDER_RADIUS - 1),
+                                    ((GRID_XSIZE - 1) * PLAYER_XSIZE - 2,
+                                     (GRID_YSIZE - 1) * PLAYER_YSIZE - 2))
         self.grid = init_grid(None)
         self.snack_location = None
 
     def display_border(self):
-        pygame.draw.rect(self.screen, WHITE, self.border, BORDER_WIDTH)
+        pygame.draw.rect(self.screen, WHITE, self.border, BORDER_WIDTH, 8)
 
     def clear_game_area(self):
         pygame.draw.rect(self.screen, BLACK, self.game_area)
@@ -351,14 +375,14 @@ class Snack(GridSprite):
         self.image = pygame.Surface((PLAYER_XSIZE, PLAYER_YSIZE))
         self.image.fill(colour)
         self.rect = pygame.Rect(gbox.screen_x(self.gx)+10, gbox.screen_y(self.gy)+10, 18, 18)
-        pygame.draw.rect(gbox.screen, colour, self.rect, 6)
+        pygame.draw.rect(gbox.screen, colour, self.rect, 6, 6)
 
     def clear(self):
         """
         Clear snack from screen and remove value from grid
         """
         self.image.fill(BLACK)
-        pygame.draw.rect(self.gbox.screen, BLACK, self.rect, 6)
+        pygame.draw.rect(self.gbox.screen, BLACK, self.rect, 6, 6)
         self.remove(self.gx, self.gy)
 
 
@@ -434,7 +458,6 @@ class Player(GridSprite):
 
         self.place(self.gx + self.dx, self.gy + self.dy)
         self.trail.append((self.gx, self.gy))
-        self.rect.move_ip(self.dx * PLAYER_XSIZE, self.dy * PLAYER_YSIZE)
         self.tail = self.trail.pop(0)
         self.remove(self.tail[0], self.tail[1])
 
@@ -450,9 +473,9 @@ class Player(GridSprite):
             self.status = self.Status.CLEAR
 
     def _draw_seg(self, gx, gy, colour):
-        rect = pygame.Rect((self.gbox.screen_x(gx)+5, self.gbox.screen_y(gy)+5),
-                                  (PLAYER_XSIZE-5, PLAYER_YSIZE-5))
-        pygame.draw.rect(self.gbox.screen, colour, rect, 6)
+        frect = FRect((self.gbox.screen_x(gx)+5, self.gbox.screen_y(gy)+5),
+                                  (PLAYER_XSIZE-3, PLAYER_YSIZE-3))
+        frect.draw(self.gbox.screen, colour, 3)
 
     def draw(self):
         # draw head and remove tail
@@ -465,7 +488,7 @@ class Player(GridSprite):
         gx = self.gx - self.dx
         gy = self.gy - self.dy
 
-        rect = pygame.Rect((self.gbox.screen_x(gx)+5, self.gbox.screen_y(gy)+5),
+        rect = pygame.Rect((self.gbox.screen_x(gx)+6, self.gbox.screen_y(gy)+6),
                                   (PLAYER_XSIZE-5, PLAYER_YSIZE-5))
         pygame.draw.rect(self.gbox.screen, self.colour, rect, 10)
 
@@ -519,6 +542,7 @@ class ComputerPlayer(Player):
 
         self.set_direction(dx, dy)
         super().move()
+
 
 def play(gbox, p1, p2):
 
@@ -630,7 +654,7 @@ def main():
             p2.set_head(22 ,4)
         else:
             break
-
+    pygame.quit()
 
 if __name__ == '__main__':
     main()
