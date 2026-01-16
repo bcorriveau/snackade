@@ -5,7 +5,7 @@
 
 MIT License
 
-Copyright (c) 2021 Brian Corriveau  https://github.com/bcorriveau/snackade
+Copyright (c) 2026 Brian Corriveau  https://github.com/bcorriveau/snackade
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +32,7 @@ SOFTWARE.
 import pygame
 from pygame.mixer import Sound, get_init, pre_init
 from array import array
+import numpy as np
 from time import sleep
 from enum import Enum
 from random import randint
@@ -69,12 +70,13 @@ BORDER_YOFF = 50
 GRID_XOFF = BORDER_XOFF + BORDER_RADIUS + 2
 GRID_YOFF = BORDER_YOFF + BORDER_RADIUS + 2
 
+# pixel dimensions for players
 PLAYER_XSIZE = 32
 PLAYER_YSIZE = 32
 
 # Grid size - playing grid includes borders
-GRID_XSIZE = 23
-GRID_YSIZE = 15
+GRID_XSIZE = 24
+GRID_YSIZE = 16
 
 # Directions for sprites
 UP = (0, -1)
@@ -89,18 +91,15 @@ dir_map = lambda x: 0 if x == 0 else abs(x) // x
 # Set up grid to check for collisions
 def init_grid(grid):
 
-    if grid == None:
-        grid = [[] for x in range(0, GRID_XSIZE+1)]
+    # set up and clear grid.
+    grid = np.zeros((GRID_YSIZE, GRID_XSIZE), dtype=int)
 
-    for x in range(0, GRID_XSIZE+1):
-        grid[x]= [0 for y in range(0, GRID_YSIZE+1)]
-
-    for x in range(0,GRID_XSIZE+1):
-        grid[x][0] = GVAL_BORDER
-        grid[x][GRID_YSIZE] =  GVAL_BORDER
-    for y in range(0,GRID_YSIZE+1):
-        grid[0][y] = GVAL_BORDER
-        grid[GRID_XSIZE][y] = GVAL_BORDER
+    # set border values
+    grid[0] = GVAL_BORDER
+    grid[GRID_YSIZE-1] = GVAL_BORDER
+    for y in range(0,GRID_YSIZE):
+        grid[y, 0] = GVAL_BORDER
+        grid[y, GRID_XSIZE-1] = GVAL_BORDER
 
     return grid
 
@@ -288,12 +287,13 @@ class GameBox:
     def __init__(self, screen):
         self.screen = screen
         self.border = pygame.Rect((BORDER_XOFF, BORDER_YOFF),
-                                  (GRID_XSIZE * PLAYER_XSIZE - BORDER_RADIUS - 3,
-                                   GRID_YSIZE * PLAYER_YSIZE - BORDER_RADIUS - 3))
+                                  ((GRID_XSIZE - 1) * PLAYER_XSIZE - BORDER_RADIUS - 3,
+                                   (GRID_YSIZE - 1) * PLAYER_YSIZE - BORDER_RADIUS - 3))
 
+        # game area is inside and excludes the borders
         self.game_area = pygame.Rect((GRID_XOFF + BORDER_RADIUS - 1, GRID_YOFF + BORDER_RADIUS - 1),
-                                    ((GRID_XSIZE - 1) * PLAYER_XSIZE - 2,
-                                     (GRID_YSIZE - 1) * PLAYER_YSIZE - 2))
+                                    ((GRID_XSIZE - 2) * PLAYER_XSIZE - 2,
+                                     (GRID_YSIZE - 2) * PLAYER_YSIZE - 2))
         self.grid = init_grid(None)
         self.snack_location = None
 
@@ -314,17 +314,17 @@ class GameBox:
         self.snack_location = None
 
     def grid_setval(self, gx, gy, value):
-        self.grid[gx][gy] = value
+        self.grid[gy, gx] = value
 
     def grid_upval(self, gx, gy, value):
-        self.grid[gx][gy] += value
+        self.grid[gy, gx] += value
         if value == GVAL_SNACK:
             self.snack_location = (gx, gy)
         elif value == -GVAL_SNACK:
             self.snack_location = None
 
     def grid_val(self, gx, gy):
-        return self.grid[gx][gy]
+        return self.grid[gy, gx]
 
 
 class GridSprite:
@@ -356,8 +356,8 @@ class Snack(GridSprite):
     def __init__(self, gbox):
         # find an empty spot on the grid for the snack
         while True:
-            gx = randint(2,GRID_XSIZE-1)
-            gy = randint(2,GRID_YSIZE-1)
+            gx = randint(1,GRID_XSIZE-2)
+            gy = randint(1,GRID_YSIZE-2)
             if gbox.grid_val(gx, gy) == GVAL_CLEAR:
                 break
 
@@ -447,7 +447,7 @@ class Player(GridSprite):
         :return:            None
         """
         for i in range(0,segments):
-            self.trail.append((self.gx,self.gy))
+            self.trail.insert(0, (self.gx,self.gy))
             self.place(self.gx, self.gy)
         self.points += points
 
@@ -568,10 +568,10 @@ def play(gbox, p1, p2):
 
             # check if key press matches a player mover key and update direction if matched
             elif event.type == pygame.KEYDOWN:
-                for p in [p1,p2]:
+                for p in [p1, p2]:
                     if event.key in p.move_key:
                         dx, dy = p.move_key[event.key]
-                        p.set_direction(dx,dy)
+                        p.set_direction(dx, dy)
 
         # are we on the second cycle?
         if not update_cycle:
@@ -639,6 +639,8 @@ def main():
     if computer_plays:
         gbox.grid_reset()
         p1 = Player(gbox, 1, 4, GREEN, ['w','s','a','d'])
+        # comment p1 above and uncomment p1 below for two computers playing each other
+        # p1 = ComputerPlayer(gbox, 1, 4, GREEN)
         p2 = ComputerPlayer(gbox, 22, 4, BLUE)
     while True:
         p1.set_direction(1, 0)
