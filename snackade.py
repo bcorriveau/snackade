@@ -33,6 +33,7 @@ import pygame
 from pygame.mixer import Sound, get_init, pre_init
 from array import array
 import numpy as np
+from typing import NamedTuple
 from time import sleep
 from enum import Enum
 from random import randint
@@ -52,6 +53,8 @@ RED = (255, 0, 0)
 DARK_RED = (139, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
+LIGHT_GREY = (200, 200, 200)
+BROWN = (100, 40, 0)
 
 # Game piece / Sprite values - each sprint adds its value to a grid location
 GVAL_CLEAR = 0
@@ -86,6 +89,11 @@ RIGHT = (1, 0)
 
 # maps from distance to simple direction, e.g. 10 becomes 1, -10 becomes -1
 dir_map = lambda x: 0 if x == 0 else abs(x) // x
+
+# Game options
+class Options(NamedTuple):
+    computer_opponent: bool
+    barriers: bool
 
 
 # Set up grid to check for collisions
@@ -230,6 +238,7 @@ def play_again(screen):
 # Display intro and get the game play selection
 #     return TRUE if computer player, FALSE if head to head
 def intro_select(screen):
+    barriers = False
     write_text(screen, ['Snackade!'],280, 6, font2)
     write_text(screen, ['         Eat snacks and cut the other',
                         '         player off without crashing!',
@@ -243,18 +252,25 @@ def intro_select(screen):
                         ' ',
                         ' ',
                         '          Press h to play head to head or',
-                        '          Press c to play the computer'], 150, 200)
+                        '          Press c to play the computer',
+                        '          Press b to play with barriers'], 150, 200)
     while True:
         key = wait_anykey()
-        if key == 'h' or key == 'c':
+
+        if key == 'b':
+            clear_text(screen, 1, 150, 434, 40)
+            write_text(screen, ['                   Barriers!'], 150, 434)
+            barriers = True
+
+        if key in ['h', 'c']:
             break
 
     if key == 'c':
         clear_text(screen, 5, 410, 272, 20)
         write_text(screen, ['    Computer!'], 420, 308)
         sleep(2)
-    clear_text(screen, 13, 150, 200, 50)
-    return key == 'c'
+    clear_text(screen, 14, 150, 200, 50)
+    return Options(key == 'c', barriers)
 
 def display_game_status(screen, p1, p2):
     clear_text(screen, 2, 250, 541, 25)
@@ -298,7 +314,7 @@ class GameBox:
         self.snack_location = None
 
     def display_border(self):
-        pygame.draw.rect(self.screen, WHITE, self.border, BORDER_WIDTH, 8)
+        pygame.draw.rect(self.screen, LIGHT_GREY, self.border, BORDER_WIDTH, 8)
 
     def clear_game_area(self):
         pygame.draw.rect(self.screen, BLACK, self.game_area)
@@ -372,8 +388,6 @@ class Snack(GridSprite):
 
         super().__init__(gbox, gx, gy, colour, GVAL_SNACK)
         self.place(gx, gy)
-        self.image = pygame.Surface((PLAYER_XSIZE, PLAYER_YSIZE))
-        self.image.fill(colour)
         self.rect = pygame.Rect(gbox.screen_x(self.gx)+10, gbox.screen_y(self.gy)+10, 18, 18)
         pygame.draw.rect(gbox.screen, colour, self.rect, 6, 6)
 
@@ -381,9 +395,23 @@ class Snack(GridSprite):
         """
         Clear snack from screen and remove value from grid
         """
-        self.image.fill(BLACK)
         pygame.draw.rect(self.gbox.screen, BLACK, self.rect, 6, 6)
         self.remove(self.gx, self.gy)
+
+
+class Barrier(GridSprite):
+    def __init__(self, gbox):
+        # find an empty spot on the grid for the snack
+        while True:
+            gx = randint(1, GRID_XSIZE - 2)
+            gy = randint(1, GRID_YSIZE - 2)
+            if gbox.grid_val(gx, gy) == GVAL_CLEAR:
+                break
+
+        super().__init__(gbox, gx, gy, BROWN, GVAL_BORDER)
+        self.place(gx, gy)
+        self.rect = pygame.Rect(gbox.screen_x(self.gx) + 5, gbox.screen_y(self.gy) + 5, 28, 28)
+        pygame.draw.rect(gbox.screen, BROWN, self.rect, border_radius=5)
 
 
 class Player(GridSprite):
@@ -406,8 +434,6 @@ class Player(GridSprite):
         super().__init__(gbox, gx, gy, colour, GVAL_PLAYER)
         self.wins = 0
         self.points = 0
-        self.image = pygame.Surface((PLAYER_XSIZE, PLAYER_YSIZE))
-        self.image.fill(self.colour)
         self.set_head(gx, gy)
         self.move_key = {}
         # set up, down, left, right vectors for keys if defined
@@ -589,8 +615,8 @@ def play(gbox, p1, p2):
                 snack = Snack(gbox)
 
         # first move to new positions
-        p1.move()
-        p2.move()
+        for p in [p1, p2]:
+            p.move()
 
         # update player statuses
         for p in [p1, p2]:
@@ -635,14 +661,19 @@ def main():
     gbox.display_border()
     p1 = Player(gbox, 1, 4, GREEN, ['w','s','a','d'])
     p2 = Player(gbox, 22, 4, BLUE, ['i','k','j','l'])
-    computer_plays = intro_select(screen)
-    if computer_plays:
+    options = intro_select(screen)
+    if options.computer_opponent:
         gbox.grid_reset()
         p1 = Player(gbox, 1, 4, GREEN, ['w','s','a','d'])
         # comment p1 above and uncomment p1 below for two computers playing each other
         # p1 = ComputerPlayer(gbox, 1, 4, GREEN)
         p2 = ComputerPlayer(gbox, 22, 4, BLUE)
     while True:
+        # Add barriers before game play if selected
+        if options.barriers:
+            for i in range(1,randint(5,11)):
+                Barrier(gbox)
+
         p1.set_direction(1, 0)
         p2.set_direction(-1, 0)
         pygame.display.update()
